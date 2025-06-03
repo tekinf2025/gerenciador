@@ -1,0 +1,721 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gerenciamento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .status-ativo {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .status-inativo {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        .status-pendente {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .dias-ok {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .dias-alerta {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .dias-vencido {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        .loading {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        th {
+            position: sticky;
+            top: 0;
+            background-color: #1e40af;
+            z-index: 10;
+        }
+        .sort-icon::after {
+            content: '↕️';
+            font-size: 0.7rem;
+            margin-left: 4px;
+        }
+        .sort-asc::after {
+            content: '↑';
+        }
+        .sort-desc::after {
+            content: '↓';
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen">
+        <header class="bg-gradient-to-r from-blue-800 to-blue-600 text-white py-6 shadow-lg">
+            <div class="container mx-auto px-4">
+                <h1 class="text-3xl font-bold">Sistema de Gerenciamento</h1>
+                <p class="mt-2 opacity-90">Controle de clientes e vencimentos</p>
+            </div>
+        </header>
+
+        <main class="container mx-auto px-4 py-8">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                    <div class="relative flex-grow">
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            placeholder="Buscar por nome, servidor ou telefone..." 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pl-10"
+                        >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <select id="statusFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todos os status</option>
+                            <option value="ATIVO">Ativo</option>
+                            <option value="INATIVO">Inativo</option>
+                            <option value="PENDENTE">Pendente</option>
+                        </select>
+                        <select id="diasFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todos os vencimentos</option>
+                            <option value="vencido">Vencidos</option>
+                            <option value="alerta">Próximos de vencer (3 dias)</option>
+                            <option value="ok">Mais de 3 dias</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="loading" class="py-20 text-center">
+                    <div class="inline-block loading">
+                        <svg class="animate-spin h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    <p class="mt-4 text-gray-600 text-lg">Carregando dados da planilha...</p>
+                </div>
+
+                <div id="error" class="hidden py-20 text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-red-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <p class="mt-4 text-gray-800 text-xl font-medium">Erro ao carregar dados</p>
+                    <p class="mt-2 text-gray-600" id="errorMessage">Ocorreu um erro ao tentar acessar a planilha.</p>
+                    <button id="retryButton" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Tentar novamente</button>
+                </div>
+
+                <div id="dataContainer" class="hidden">
+                    <div class="table-container">
+                        <table class="min-w-full">
+                            <thead>
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="id">
+                                        <span class="sort-icon">ID</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="nome">
+                                        <span class="sort-icon">Nome</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="vencimento">
+                                        <span class="sort-icon">Vencimento</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="status">
+                                        <span class="sort-icon">Status</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="servidor">
+                                        <span class="sort-icon">Servidor</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="valor">
+                                        <span class="sort-icon">Valor</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="dias_restantes">
+                                        <span class="sort-icon">Dias Restantes</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer" data-sort="telefone">
+                                        <span class="sort-icon">Telefone</span>
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                        <span>Observação</span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Dados serão inseridos aqui via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 text-gray-600 text-sm">
+                        <p id="resultCount"></p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="bg-gray-800 text-white py-6">
+            <div class="container mx-auto px-4 text-center">
+                <p>Sistema de Gerenciamento de Clientes © 2023</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Configuração da planilha
+        const 1stZWsUYuK8MNrZ5PLTopihVG6_rA23ilDhG8G1cNKi0 = '1stZWsUYuK8MNrZ5PLTopihVG6_rA23ilDhG8G1cNKi0';
+        const SHEET_NAME = 'Sheet1'; // Ajuste conforme o nome da sua aba
+
+        // Estado da aplicação
+        let allData = [];
+        let filteredData = [];
+        let currentSort = {
+            column: 'id',
+            direction: 'asc'
+        };
+
+        // Elementos DOM
+        const loadingElement = document.getElementById('loading');
+        const errorElement = document.getElementById('error');
+        const errorMessageElement = document.getElementById('errorMessage');
+        const dataContainer = document.getElementById('dataContainer');
+        const tableBody = document.getElementById('tableBody');
+        const resultCount = document.getElementById('resultCount');
+        const searchInput = document.getElementById('searchInput');
+        const statusFilter = document.getElementById('statusFilter');
+        const diasFilter = document.getElementById('diasFilter');
+        const retryButton = document.getElementById('retryButton');
+
+        // Função para carregar dados da planilha usando JSONP
+        function loadSheetData() {
+            showLoading();
+            
+            // Usar o formato de exportação CSV do Google Sheets
+            const url = `https://docs.google.com/spreadsheets/d/${1stZWsUYuK8MNrZ5PLTopihVG6_rA23ilDhG8G1cNKi0}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Erro ao acessar a planilha: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(text => {
+                    // O Google retorna um prefixo antes do JSON que precisamos remover
+                    const jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+                    const data = JSON.parse(jsonText);
+                    
+                    if (!data.table || !data.table.rows || data.table.rows.length <= 0) {
+                        throw new Error('A planilha está vazia ou contém apenas cabeçalhos');
+                    }
+                    
+                    // Extrair cabeçalhos e dados
+                    const headers = data.table.cols.map(col => col.label.toLowerCase());
+                    const rows = data.table.rows;
+                    
+                    // Mapear dados para objetos
+                    allData = rows.map(row => {
+                        const item = {};
+                        headers.forEach((header, index) => {
+                            item[header] = row.c[index] ? (row.c[index].v || '') : '';
+                        });
+                        
+                        // Calcular dias restantes
+                        if (item.vencimento) {
+                            let vencimentoDate;
+                            
+                            // Se for um objeto Date do Google Sheets
+                            if (typeof item.vencimento === 'object' && item.vencimento.year) {
+                                vencimentoDate = new Date(
+                                    item.vencimento.year,
+                                    item.vencimento.month - 1,
+                                    item.vencimento.day
+                                );
+                            } else {
+                                vencimentoDate = parseDate(item.vencimento);
+                            }
+                            
+                            if (vencimentoDate) {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                
+                                const diffTime = vencimentoDate - today;
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                
+                                item.dias_restantes = diffDays;
+                            }
+                        } else {
+                            item.dias_restantes = '';
+                        }
+                        
+                        return item;
+                    });
+                    
+                    // Aplicar filtros iniciais e renderizar
+                    applyFiltersAndRender();
+                    showData();
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar dados:', error);
+                    showError(error.message);
+                });
+        }
+
+        // Método alternativo usando JSONP diretamente
+        function loadSheetDataAlternative() {
+            showLoading();
+            
+            // Criar um elemento script para JSONP
+            const script = document.createElement('script');
+            const callbackName = 'googleSheetsCallback' + Math.round(Math.random() * 1000000);
+            
+            // Definir a função de callback
+            window[callbackName] = function(data) {
+                try {
+                    if (!data || !data.feed || !data.feed.entry) {
+                        throw new Error('Dados da planilha não encontrados ou formato inválido');
+                    }
+                    
+                    const entries = data.feed.entry;
+                    const headers = [];
+                    const rows = {};
+                    
+                    // Extrair cabeçalhos e dados
+                    entries.forEach(entry => {
+                        const cell = entry.gs$cell;
+                        const row = parseInt(cell.row);
+                        const col = parseInt(cell.col);
+                        
+                        if (row === 1) {
+                            // É um cabeçalho
+                            headers[col - 1] = cell.$t.toLowerCase();
+                        } else {
+                            // É um dado
+                            if (!rows[row]) {
+                                rows[row] = {};
+                            }
+                            
+                            const header = headers[col - 1];
+                            if (header) {
+                                rows[row][header] = cell.$t;
+                            }
+                        }
+                    });
+                    
+                    // Converter para array
+                    allData = Object.values(rows);
+                    
+                    // Calcular dias restantes para cada item
+                    allData.forEach(item => {
+                        if (item.vencimento) {
+                            const vencimentoDate = parseDate(item.vencimento);
+                            if (vencimentoDate) {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                
+                                const diffTime = vencimentoDate - today;
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                
+                                item.dias_restantes = diffDays;
+                            } else {
+                                item.dias_restantes = '';
+                            }
+                        } else {
+                            item.dias_restantes = '';
+                        }
+                    });
+                    
+                    // Aplicar filtros iniciais e renderizar
+                    applyFiltersAndRender();
+                    showData();
+                    
+                } catch (error) {
+                    console.error('Erro ao processar dados:', error);
+                    showError(error.message);
+                }
+                
+                // Limpar a função de callback e remover o script
+                delete window[callbackName];
+                document.body.removeChild(script);
+            };
+            
+            // Configurar a URL para a API de feeds do Google Sheets
+            const url = `https://spreadsheets.google.com/feeds/cells/${1stZWsUYuK8MNrZ5PLTopihVG6_rA23ilDhG8G1cNKi0}/1/public/values?alt=json-in-script&callback=${callbackName}`;
+            
+            // Adicionar o script à página
+            script.src = url;
+            document.body.appendChild(script);
+            
+            // Definir um timeout para caso a API não responda
+            setTimeout(() => {
+                if (window[callbackName]) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    showError('Tempo limite excedido ao tentar acessar a planilha');
+                }
+            }, 10000);
+        }
+
+        // Terceiro método usando CSV direto
+        function loadSheetDataCSV() {
+            showLoading();
+            
+            // URL para exportar a planilha como CSV
+            const url = `https://docs.google.com/spreadsheets/d/${1stZWsUYuK8MNrZ5PLTopihVG6_rA23ilDhG8G1cNKi0}/export?format=csv&id=${1stZWsUYuK8MNrZ5PLTopihVG6_rA23ilDhG8G1cNKi0}&gid=0`;
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Erro ao acessar a planilha: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(csvText => {
+                    // Processar o CSV
+                    const lines = csvText.split('\n');
+                    if (lines.length <= 1) {
+                        throw new Error('A planilha está vazia ou contém apenas cabeçalhos');
+                    }
+                    
+                    // Extrair cabeçalhos
+                    const headers = lines[0].split(',').map(header => 
+                        header.trim().toLowerCase().replace(/^"(.*)"$/, '$1')
+                    );
+                    
+                    // Processar linhas de dados
+                    allData = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        if (!lines[i].trim()) continue;
+                        
+                        // Dividir a linha em colunas, respeitando aspas
+                        const values = parseCSVLine(lines[i]);
+                        
+                        const item = {};
+                        headers.forEach((header, index) => {
+                            let value = index < values.length ? values[index] : '';
+                            // Remover aspas se existirem
+                            value = value.replace(/^"(.*)"$/, '$1');
+                            item[header] = value;
+                        });
+                        
+                        // Calcular dias restantes
+                        if (item.vencimento) {
+                            const vencimentoDate = parseDate(item.vencimento);
+                            if (vencimentoDate) {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                
+                                const diffTime = vencimentoDate - today;
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                
+                                item.dias_restantes = diffDays;
+                            } else {
+                                item.dias_restantes = '';
+                            }
+                        } else {
+                            item.dias_restantes = '';
+                        }
+                        
+                        allData.push(item);
+                    }
+                    
+                    // Aplicar filtros iniciais e renderizar
+                    applyFiltersAndRender();
+                    showData();
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar dados CSV:', error);
+                    showError(error.message);
+                    
+                    // Se falhar, tentar o método alternativo
+                    console.log('Tentando método alternativo...');
+                    loadSheetDataAlternative();
+                });
+        }
+
+        // Função para analisar uma linha CSV respeitando aspas
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            result.push(current);
+            return result;
+        }
+
+        // Função para converter string de data para objeto Date
+        function parseDate(dateString) {
+            if (!dateString) return null;
+            
+            // Verificar formato DD/MM/YYYY
+            const parts = dateString.split('/');
+            if (parts.length === 3) {
+                return new Date(parts[2], parts[1] - 1, parts[0]);
+            }
+            
+            // Tentar formato ISO ou outro formato reconhecido pelo JS
+            const date = new Date(dateString);
+            if (!isNaN(date)) {
+                return date;
+            }
+            
+            return null;
+        }
+
+        // Função para formatar data como DD/MM/YYYY
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            
+            const date = parseDate(dateString);
+            if (!date || isNaN(date)) return dateString;
+            
+            return date.toLocaleDateString('pt-BR');
+        }
+
+        // Função para aplicar filtros e ordenação
+        function applyFiltersAndRender() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const statusValue = statusFilter.value;
+            const diasValue = diasFilter.value;
+            
+            filteredData = allData.filter(item => {
+                // Filtro de busca
+                const matchesSearch = 
+                    !searchTerm || 
+                    (item.nome && item.nome.toLowerCase().includes(searchTerm)) ||
+                    (item.servidor && item.servidor.toLowerCase().includes(searchTerm)) ||
+                    (item.telefone && item.telefone.toLowerCase().includes(searchTerm));
+                
+                // Filtro de status
+                const matchesStatus = !statusValue || (item.status && item.status.toUpperCase() === statusValue);
+                
+                // Filtro de dias restantes
+                let matchesDias = true;
+                if (diasValue) {
+                    const dias = parseInt(item.dias_restantes);
+                    if (diasValue === 'vencido') {
+                        matchesDias = dias < 0;
+                    } else if (diasValue === 'alerta') {
+                        matchesDias = dias >= 0 && dias <= 3;
+                    } else if (diasValue === 'ok') {
+                        matchesDias = dias > 3;
+                    }
+                }
+                
+                return matchesSearch && matchesStatus && matchesDias;
+            });
+            
+            // Aplicar ordenação
+            sortData();
+            
+            // Renderizar dados
+            renderTable();
+        }
+
+        // Função para ordenar dados
+        function sortData() {
+            const { column, direction } = currentSort;
+            
+            filteredData.sort((a, b) => {
+                let valueA = a[column] || '';
+                let valueB = b[column] || '';
+                
+                // Tratamento especial para colunas numéricas
+                if (column === 'id' || column === 'dias_restantes') {
+                    valueA = parseInt(valueA) || 0;
+                    valueB = parseInt(valueB) || 0;
+                } 
+                // Tratamento especial para valores monetários
+                else if (column === 'valor') {
+                    valueA = parseFloat(valueA.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+                    valueB = parseFloat(valueB.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+                }
+                // Tratamento especial para datas
+                else if (column === 'vencimento') {
+                    valueA = parseDate(valueA) || new Date(0);
+                    valueB = parseDate(valueB) || new Date(0);
+                }
+                
+                if (direction === 'asc') {
+                    return valueA > valueB ? 1 : -1;
+                } else {
+                    return valueA < valueB ? 1 : -1;
+                }
+            });
+        }
+
+        // Função para renderizar a tabela
+        function renderTable() {
+            tableBody.innerHTML = '';
+            
+            if (filteredData.length === 0) {
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = `
+                    <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                        Nenhum registro encontrado com os filtros atuais.
+                    </td>
+                `;
+                tableBody.appendChild(emptyRow);
+            } else {
+                filteredData.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-50 transition-colors';
+                    
+                    // Determinar classe para status
+                    let statusClass = '';
+                    if (item.status) {
+                        const status = item.status.toUpperCase();
+                        if (status === 'ATIVO') statusClass = 'status-ativo';
+                        else if (status === 'INATIVO') statusClass = 'status-inativo';
+                        else if (status === 'PENDENTE') statusClass = 'status-pendente';
+                    }
+                    
+                    // Determinar classe para dias restantes
+                    let diasClass = '';
+                    const dias = parseInt(item.dias_restantes);
+                    if (!isNaN(dias)) {
+                        if (dias < 0) diasClass = 'dias-vencido';
+                        else if (dias <= 3) diasClass = 'dias-alerta';
+                        else diasClass = 'dias-ok';
+                    }
+                    
+                    // Formatar valor monetário
+                    let valorFormatado = item.valor;
+                    if (valorFormatado && !isNaN(parseFloat(valorFormatado.replace(',', '.')))) {
+                        valorFormatado = parseFloat(valorFormatado.replace(',', '.')).toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL'
+                        });
+                    }
+                    
+                    row.innerHTML = `
+                        <td class="px-4 py-3 whitespace-nowrap">${item.id || ''}</td>
+                        <td class="px-4 py-3">${item.nome || ''}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${formatDate(item.vencimento)}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass}">
+                                ${item.status || ''}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">${item.servidor || ''}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">${valorFormatado || ''}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs font-medium rounded-full ${diasClass}">
+                                ${isNaN(dias) ? '' : dias}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 whitespace-nowrap">${item.telefone || ''}</td>
+                        <td class="px-4 py-3">${item.observação || item.observacao || ''}</td>
+                    `;
+                    
+                    tableBody.appendChild(row);
+                });
+            }
+            
+            // Atualizar contador de resultados
+            resultCount.textContent = `Exibindo ${filteredData.length} de ${allData.length} registros`;
+        }
+
+        // Funções para controle de visualização
+        function showLoading() {
+            loadingElement.classList.remove('hidden');
+            errorElement.classList.add('hidden');
+            dataContainer.classList.add('hidden');
+        }
+
+        function showError(message) {
+            loadingElement.classList.add('hidden');
+            errorElement.classList.remove('hidden');
+            dataContainer.classList.add('hidden');
+            errorMessageElement.textContent = message;
+        }
+
+        function showData() {
+            loadingElement.classList.add('hidden');
+            errorElement.classList.add('hidden');
+            dataContainer.classList.remove('hidden');
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Carregar dados iniciais - tentando o método CSV primeiro
+            loadSheetDataCSV();
+            
+            // Configurar filtros
+            searchInput.addEventListener('input', applyFiltersAndRender);
+            statusFilter.addEventListener('change', applyFiltersAndRender);
+            diasFilter.addEventListener('change', applyFiltersAndRender);
+            
+            // Configurar ordenação
+            document.querySelectorAll('th[data-sort]').forEach(header => {
+                header.addEventListener('click', () => {
+                    const column = header.getAttribute('data-sort');
+                    
+                    // Atualizar direção de ordenação
+                    if (currentSort.column === column) {
+                        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSort.column = column;
+                        currentSort.direction = 'asc';
+                    }
+                    
+                    // Atualizar ícones de ordenação
+                    document.querySelectorAll('th[data-sort] span').forEach(span => {
+                        span.classList.remove('sort-asc', 'sort-desc');
+                        span.classList.add('sort-icon');
+                    });
+                    
+                    const currentSpan = header.querySelector('span');
+                    currentSpan.classList.remove('sort-icon');
+                    currentSpan.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+                    
+                    // Aplicar ordenação e renderizar
+                    applyFiltersAndRender();
+                });
+            });
+            
+            // Configurar botão de tentar novamente
+            retryButton.addEventListener('click', () => {
+                loadSheetDataCSV();
+            });
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9405456a414714c3',t:'MTc0NzMzOTc0Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
